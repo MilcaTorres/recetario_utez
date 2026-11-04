@@ -1,4 +1,8 @@
+import 'package:flutter/foundation.dart';
+import 'package:recetario_utez/datos/recetas_repositorio.dart';
+import 'package:recetario_utez/dominio/falla_red.dart';
 import 'package:recetario_utez/dominio/receta.dart';
+import 'package:recetario_utez/presentacion/mensajes.dart';
 
 sealed class EstadoRecetas {
   const EstadoRecetas();
@@ -15,9 +19,7 @@ final class RecetasCargando extends EstadoRecetas {
 final class RecetasListas extends EstadoRecetas {
   const RecetasListas(this.recetas, this.total);
 
-  final List<Receta> recetas
-  ;
-
+  final List<Receta> recetas;
   final int total;
 }
 
@@ -34,18 +36,51 @@ final class RecetasFallidas extends EstadoRecetas {
 }
 
 class RecetasViewModel extends ChangeNotifier {
-  RecetasViewModel(RecetasRepositorio repositorio);
+  RecetasViewModel(this._repositorio);
 
-  EstadoRecetas get estado; // empieza en RecetasInicial
-  bool get cargando; // derivado del estado
-  String get ultimaBusqueda; // el último texto buscado, ya sin espacios
-  int get rapidas; // derivado: recetas rápidas del resultado; 0 si no hay
+  final RecetasRepositorio _repositorio;
 
-  Future<void> buscar(String texto) {
-    ...
+  EstadoRecetas _estado = const RecetasInicial();
+  String _ultimaBusqueda = '';
+  bool _liberado = false;
+
+  EstadoRecetas get estado => _estado; // empieza en RecetasInicial
+  bool get cargando => _estado is RecetasCargando; // derivado del estado
+  String get ultimaBusqueda =>
+      _ultimaBusqueda; // el último texto buscado, ya sin espacios
+  int get rapidas => switch (_estado) {
+    RecetasListas(:final recetas) => recetas.where((r) => r.esRapida).length,
+    _ => 0,
+  }; // derivado: recetas rápidas del resultado; 0 si no hay
+
+  Future<void> buscar(String texto) async {
+    if (cargando) return;
+    _ultimaBusqueda = texto.trim();
+    _cambiar(const RecetasCargando());
+    try {
+      final pagina = await _repositorio.buscar(texto: _ultimaBusqueda);
+      _cambiar(
+        pagina.recetas.isEmpty
+            ? RecetasVacias(_ultimaBusqueda)
+            : RecetasListas(pagina.recetas, pagina.total),
+      );
+    } on FallaRed catch (falla) {
+      _cambiar(RecetasFallidas(mensajePara(falla)));
+    } catch (_) {
+      _cambiar(const RecetasFallidas(mensajeInesperado));
+    }
   }
 
-  Future<void> reintentar() {
-    ...
+  Future<void> reintentar() => buscar(_ultimaBusqueda);
+
+  void _cambiar(EstadoRecetas nuevo) {
+    _estado = nuevo;
+    if (!_liberado) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _liberado = true;
+    super.dispose();
   }
 }
