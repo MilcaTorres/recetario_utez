@@ -26,7 +26,7 @@ class _AppRecetarioState extends State<AppRecetario> {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Recetario UTEZ',
-      theme: ThemeData(colorSchemeSeed: Colors.deepOrange),
+      theme: ThemeData(colorSchemeSeed: Colors.blue),
       home: RecetasPagina(vm: _vm),
     );
   }
